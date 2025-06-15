@@ -1,10 +1,7 @@
 #lang racket
 
-(require parser/s-expression
-         runtime/class
-         runtime/inheritance
-         runtime/dispatch
-         runtime/environment)
+(require "parser.rkt"
+         "runtime.rkt")
 
 (define (main)
   (command-line
