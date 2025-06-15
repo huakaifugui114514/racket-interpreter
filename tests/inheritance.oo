@@ -1,0 +1,20 @@
+(class Animal ()
+  (field name "Unknown")
+  
+  (constructor (n)
+    (set this name n))
+  
+  (method speak () 
+    (begin 
+      (print "Animal sound"))))
+
+(class Dog (extends Animal)
+  (method speak () 
+    (begin 
+      (print (string-append (get this name) " says: Woof!")))))
+
+(define a (new Animal "Generic Animal"))
+(send a speak) ; 输出: Animal sound
+
+(define d (new Dog "Buddy"))
+(send d speak) ; 输出: Buddy says: Woof!
