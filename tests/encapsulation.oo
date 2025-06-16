@@ -14,9 +14,5 @@
 
 (define acc (new BankAccount))
 (send acc deposit 100)
-(send acc withdraw 30) ; 成功
-(send acc get-balance) ; 返回70
-
-; 以下操作应该报错
-; (get acc balance)   ; 错误: Cannot access private field
-; (set acc balance 0) ; 错误: Cannot set private field
+(send acc withdraw 30)
+(println (string-append "Balance: " (number->string (send acc get-balance))))

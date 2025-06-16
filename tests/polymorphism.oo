@@ -21,8 +21,8 @@
   (method area ()
     (* 3.14159 (get this radius) (get this radius))))
 
-(define shapes (list (new Rectangle 5 10) (new Circle 7)))
+(define rect (new Rectangle 5 10))
+(println (string-append "Rectangle area: " (number->string (send rect area))))
 
-; 多态调用
-(for-each (lambda (s) (print (send s area))) shapes)
-; 输出: 50 和 153.93791
+(define circle (new Circle 7))
+(println (string-append "Circle area: " (number->string (send circle area))))

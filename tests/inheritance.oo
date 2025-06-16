@@ -5,16 +5,14 @@
     (set this name n))
   
   (method speak () 
-    (begin 
-      (print "Animal sound"))))
+    (println "Animal sound")))
 
 (class Dog (extends Animal)
   (method speak () 
-    (begin 
-      (print (string-append (get this name) " says: Woof!")))))
+    (println (string-append (get this name) " says: Woof!"))))
 
 (define a (new Animal "Generic Animal"))
-(send a speak) ; 输出: Animal sound
+(send a speak)
 
 (define d (new Dog "Buddy"))
-(send d speak) ; 输出: Buddy says: Woof!
+(send d speak)

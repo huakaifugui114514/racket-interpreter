@@ -42,7 +42,7 @@
   ;; 调用构造函数
   (define constr (hash-ref (class-methods cls) 'constructor #f))
   (when constr
-    (let ([this-env `((this . ,obj) (super . ,parent))])
+    (let ([this-env (list (cons 'this obj))])
       (apply-method constr obj this-env args env)))
   
   obj)
@@ -60,15 +60,15 @@
   (define m (find-method cls method-name))
   
   (unless m
-    (error "Method not found:" method-name))
+    (error (format "Method not found: ~a in class ~a" method-name (class-name cls))))
   
   (when (method-is-private m)
-    (error "Cannot call private method:" method-name))
+    (error (format "Cannot call private method: ~a" method-name)))
   
-  (define this-env `((this . ,obj)))
+  (define this-env (list (cons 'this obj)))
   (apply-method m obj this-env args env))
 
-(define (apply-method m obj env args caller-env)
+(define (apply-method m obj this-env args caller-env)
   (define param-names (method-params m))
   (unless (= (length param-names) (length args))
     (error "Argument count mismatch"))
@@ -78,8 +78,8 @@
     (for/list ([name param-names] [arg args])
       (cons name arg)))
   
-  ;; 组合环境
-  (eval-expr (append arg-env env caller-env) (method-body m)))
+  ;; 组合环境: this绑定 + 参数绑定 + 调用者环境
+  (eval-expr (append this-env arg-env caller-env) (method-body m)))
 
 (define (access-field obj field env)
   (define fields (object-fields obj))
@@ -87,9 +87,9 @@
   
   (cond
     [(hash-has-key? fields private-key)
-     (error "Cannot access private field:" field)]
+     (error (format "Cannot access private field: ~a" field))]
     [(hash-ref fields field #f) => values]
-    [else (error "Field not found:" field)]))
+    [else (error (format "Field not found: ~a" field))]))
 
 (define (set-field! obj field value env)
   (define fields (object-fields obj))
@@ -97,52 +97,79 @@
   
   (cond
     [(hash-has-key? fields private-key)
-     (error "Cannot set private field:" field)]
+     (error (format "Cannot set private field: ~a" field))]
     [(hash-has-key? fields field)
      (hash-set! fields field value)]
-    [else (error "Field not found:" field)]))
+    [else (error (format "Field not found: ~a" field))]))
 
 ;; ===== 环境管理 =====
 (define (make-base-environment)
   `((true . #t)
     (false . #f)
     (null . null)
-    (print . ,(lambda (v) (display v) (newline) v))
-    (println . ,(lambda (v) (displayln v) v))))
+    (print . ,(lambda (v) (display v) v))
+    (println . ,(lambda (v) (displayln v) v))
+    (string-append . ,string-append)
+    (number->string . ,number->string)
+    (symbol->string . ,symbol->string)
+    (string->symbol . ,string->symbol)
+    (string->number . ,string->number)
+    (+ . ,+)
+    (- . ,-)
+    (* . ,*)
+    (/ . ,/)
+    (> . ,>)
+    (< . ,<)
+    (>= . ,>=)
+    (<= . ,<=)
+    (= . ,=)
+    (cons . ,cons)
+    (car . ,car)
+    (cdr . ,cdr)
+    (list . ,list)
+    (null? . ,null?)
+    (pair? . ,pair?)))
 
 (define (lookup-var env var)
   (match (assoc var env)
     [(cons _ value) value]
-    [#f (error "Undefined variable:" var)]))
+    [#f (error (format "Undefined variable: ~a" var))]))
 
 (define (extend-env env bindings)
   (append bindings env))
 
 (define (eval-expr env expr)
   (match expr
-    ;; 类定义
-    [`(class ,name (extends ,super) ,body ...)
-     (define parent (lookup-class super))
-     (define fields (make-hash))
-     (define methods (make-hash))
-     
-     (for ([expr body])
-       (match expr
-         [`(field ,name ,init) 
-          (hash-set! fields name (eval-expr env init))]
-         [`(private ,name ,init)
-          (hash-set! fields (make-private-key name) (eval-expr env init))]
-         [`(method ,name ,params ,body)
-          (hash-set! methods name (method params body #f))]
-         [`(private-method ,name ,params ,body)
-          (hash-set! methods name (method params body #t))]
-         [`(constructor ,params ,body ...)
-          (hash-set! methods 'constructor (method params `(begin ,@body) #f))]
-         [_ (error "Invalid class body element:" expr)]))
-     
-     (define new-class (class name parent fields methods))
-     (register-class! name new-class)
-     new-class]
+    ;; 类定义 - 特殊形式处理
+    [`(class ,name ,super-part ,body ...)
+     (let* ([super (match super-part
+                    [`(extends ,super-name) (lookup-class super-name)]
+                    ['() #f]
+                    [_ (error "Invalid superclass specification:" super-part)])]
+            [fields (make-hash)]
+            [methods (make-hash)])
+       ;; 处理类体中的表达式
+       (for ([expr body])
+         (match expr
+           [`(field ,field-name ,init-expr)
+            (let ([value (eval-expr env init-expr)])
+              (hash-set! fields field-name value))]
+           [`(private ,field-name ,init-expr)
+            (let ([value (eval-expr env init-expr)]
+                  [private-key (make-private-key field-name)])
+              (hash-set! fields private-key value))]
+           [`(method ,method-name ,params ,body-expr)
+            (hash-set! methods method-name (method params body-expr #f))]
+           [`(private-method ,method-name ,params ,body-expr)
+            (hash-set! methods method-name (method params body-expr #t))]
+           [`(constructor ,params . ,body-exprs)
+            (let ([body-expr `(begin ,@body-exprs)])
+              (hash-set! methods 'constructor (method params body-expr #f)))]
+           [_
+            (error "Invalid class body element:" expr)]))
+       (define new-class (class name super fields methods))
+       (register-class! name new-class)
+       new-class)]
     
     ;; 对象实例化
     [`(new ,class-name ,args ...)
@@ -170,8 +197,8 @@
     
     ;; 变量定义
     [`(define ,var ,value)
-     (define val (eval-expr env value))
-     (cons (cons var val) env)]
+     (let ([val (eval-expr env value)])
+       (cons (cons var val) env))]
     
     ;; 变量引用
     [(? symbol? var) (lookup-var env var)]
@@ -183,22 +210,24 @@
     
     ;; 块表达式
     [`(begin ,exprs ...)
-     (for/fold ([result null] [current-env env])
+     (for/fold ([env env] [result (void)] #:result result)
                ([e exprs])
-       (values (eval-expr current-env e) current-env))]
+       (let ([res (eval-expr env e)])
+         (if (and (list? res) (assoc (car exprs) env))
+             (values res res)  ;; 如果是定义表达式，使用新环境
+             (values env res))))] ;; 否则保持环境不变
     
     ;; 函数应用
     [`(,func . ,args)
      (define f (eval-expr env func))
      (if (procedure? f)
          (apply f (map (curry eval-expr env) args))
-         (error "Not a procedure:" f))]
+         (error (format "Not a procedure: ~a" f)))]
     
     ;; 直接值
     [v v]))
 
 (define (eval-program exprs)
-  (define env (make-base-environment))
-  (for/fold ([result null] [current-env env])
+  (for/fold ([env (make-base-environment)])
             ([expr exprs])
-    (values (eval-expr current-env expr) current-env)))
+    (eval-expr env expr)))
