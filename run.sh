@@ -10,7 +10,7 @@ fi
 
 run_file() {
     echo "===== Running $1 ====="
-    if racket -t "main.rkt" -m "$1"; then
+    if racket main.rkt "$1"; then
         echo "===== Finished $1 (success) ====="
         return 0
     else
@@ -48,7 +48,7 @@ while true; do
     tmpfile=$(mktemp /tmp/oolang.XXXXXX)
     echo "$input" > "$tmpfile"
     
-    if ! racket -t "main.rkt" -m "$tmpfile"; then
+    if ! racket main.rkt "$tmpfile"; then
         echo "Error evaluating expression"
     fi
     

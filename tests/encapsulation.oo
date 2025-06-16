@@ -6,7 +6,9 @@
   
   (method withdraw (amount)
     (if (>= (get this balance) amount)
-        (set this balance (- (get this balance) amount))
+        (begin
+          (set this balance (- (get this balance) amount))
+          #t)
         "Insufficient funds"))
   
   (method get-balance () 
