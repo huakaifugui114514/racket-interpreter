@@ -1,5 +1,5 @@
 #!/bin/bash
-# run.sh - One-click runner for OOLang interpreter
+# run.sh - One-click test runner for OOLang tests
 
 cd "$(dirname "$0")"
 
@@ -8,49 +8,36 @@ if ! command -v racket &> /dev/null; then
     exit 1
 fi
 
-run_file() {
-    echo "===== Running $1 ====="
-    if racket main.rkt "$1"; then
-        echo "===== Finished $1 (success) ====="
+run_test_file() {
+    local test_file="$1"
+    echo "===== Running $test_file ====="
+    if racket main.rkt "$test_file"; then
+        echo "===== Finished $test_file (success) ====="
         return 0
     else
-        echo "===== Finished $1 (failed) ====="
+        echo "===== Finished $test_file (failed) ====="
         return 1
     fi
     echo ""
 }
 
-if [ "$1" = "test" ]; then
+if [ "$1" = "all" ]; then
     echo ">>> Running all test cases"
     for test_file in tests/*.oo; do
-        run_file "$test_file" || true
+        run_test_file "$test_file" || true
     done
     echo ">>> All tests completed"
     exit 0
 fi
 
 if [ -n "$1" ]; then
-    run_file "$1"
+    run_test_file "$1"
     exit $?
 fi
 
-echo "===== OOLang Interactive Console ====="
-echo "Enter OOLang expressions. Type 'exit' to quit."
+echo "Usage:"
+echo "  ./run.sh all               Run all test cases"
+echo "  ./run.sh <test-file.oo>    Run specific test file"
 echo ""
-
-while true; do
-    read -p "OOLang> " input
-    
-    if [ "$input" = "exit" ]; then
-        break
-    fi
-    
-    tmpfile=$(mktemp /tmp/oolang.XXXXXX)
-    echo "$input" > "$tmpfile"
-    
-    if ! racket main.rkt "$tmpfile"; then
-        echo "Error evaluating expression"
-    fi
-    
-    rm "$tmpfile"
-done
+echo "Available test files:"
+ls tests/*.oo | sed 's/^/  /'

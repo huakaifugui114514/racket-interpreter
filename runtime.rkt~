@@ -1,6 +1,6 @@
 #lang racket
 
-(require ffi/unsafe)
+(require ffi/unsafe) ; 确保导入 future 模块
 (provide (all-defined-out))
 
 ;; ==================== 堆栈跟踪支持 ====================
@@ -188,83 +188,78 @@
    (cons '= =)
    (cons '< <)
    (cons '> >)
-   (cons 'raise raise)
-   (cons 'release release)
-   (cons 'retain retain))) ; 添加 retain 到基环境
+   (cons 'raise raise)))
 
 (define (lookup-var env var)
   (let ([pair (assoc var env)])
     (if pair
         (cdr pair)
-        (let ([available-vars (map car env)])
-          (error (format "Undefined variable: ~a. Available: ~a" 
-                         var 
-                         (string-join (map symbol->string available-vars) ", ")))))))
+        (error (format "Undefined variable: ~a" var)))))
 
 (define (eval-expr env expr)
   (parameterize ([call-stack (cons expr (call-stack))])
     (match expr
       ;; 类定义
-      [`(class ,name ,super-part ,body ...)
-       (define super-obj
-         (match super-part
-           [`(extends ,super-name) (lookup-class super-name)]
-           ['() #f]
-           [`(implements ,interfaces ...) #f] ; 新增接口支持
-           [_ (error "Invalid superclass specification:" super-part)]))
+      (`(class ,name ,super-part ,body ...)
+       (let* ([super-obj (match super-part
+                           [`(extends ,super-name) (lookup-class super-name)]
+                           ['() #f]
+                           [_ (error "Invalid superclass specification:" super-part)])]
+              [fields (make-hash)]
+              [methods (make-hash)]
+              [static-fields (make-hash)]
+              [static-methods (make-hash)])
+   
+         (for ([expr body])
+           (match expr
+             ;; 字段定义
+             [`(field ,field-name ,init-expr)
+              (hash-set! fields field-name (eval-expr env init-expr))]
        
-       (define fields (make-hash))
-       (define methods (make-hash))
-       (define static-fields (make-hash))
-       (define static-methods (make-hash))
+             [`(private ,field-name ,init-expr)
+              (let ([private-key (make-private-key field-name)])
+                (hash-set! fields private-key (eval-expr env init-expr)))]
        
-       (for ([expr body])
-         (match expr
-           [`(field ,field-name ,init-expr)
-            (hash-set! fields field-name (eval-expr env init-expr))]
-           
-           [`(private ,field-name ,init-expr)
-            (let ([private-key (make-private-key field-name)])
-              (hash-set! fields private-key (eval-expr env init-expr)))]
-           
-           [`(static-field ,field-name ,init-expr)
-            (hash-set! static-fields field-name (eval-expr env init-expr))]
-           
-           [`(static-private ,field-name ,init-expr)
-            (let ([private-key (make-private-key field-name)])
-              (hash-set! static-fields private-key (eval-expr env init-expr)))]
-           
-           [`(method ,method-name ,params ,body-expr)
-            (hash-set! methods method-name (method params body-expr #f))]
-           
-           [`(private-method ,method-name ,params ,body-expr)
-            (hash-set! methods method-name (method params body-expr #t))]
-           
-           [`(static-method ,method-name ,params ,body-expr)
-            (hash-set! static-methods method-name (method params body-expr #f))]
-           
-           [`(static-private-method ,method-name ,params ,body-expr)
-            (hash-set! static-methods method-name (method params body-expr #t))]
-           
-           [`(constructor ,params . ,body-exprs)
-            (hash-set! methods 'constructor 
-                       (method params `(begin ,@body-exprs) #f))]
-           
-           [`(destructor . ,body-exprs)
-            (hash-set! methods '__del__ 
-                       (method '() `(begin ,@body-exprs) #f))]
-           
-           [`(abstract method ,method-name ,params) ; 新增抽象方法处理
-            (hash-set! methods method-name (method params #f #t))] ; 第三个参数标记为抽象方法
-           
-           [_ (error "Invalid class body element:" expr)]))
+             ;; 静态字段
+             [`(static-field ,field-name ,init-expr)
+              (hash-set! static-fields field-name (eval-expr env init-expr))]
        
-       (define new-class 
-         (class name super-obj fields methods static-fields static-methods))
-       (register-class! name new-class)
-       (cons (cons name new-class) env)
-       new-class]
-      
+             [`(static-private ,field-name ,init-expr)
+              (let ([private-key (make-private-key field-name)])
+                (hash-set! static-fields private-key (eval-expr env init-expr)))]
+       
+             ;; 方法定义
+             [`(method ,method-name ,params ,body-expr)
+              (hash-set! methods method-name (method params body-expr #f))]
+       
+             [`(private-method ,method-name ,params ,body-expr)
+              (hash-set! methods method-name (method params body-expr #t))]
+       
+             ;; 静态方法
+             [`(static-method ,method-name ,params ,body-expr)
+              (hash-set! static-methods method-name (method params body-expr #f))]
+       
+             [`(static-private-method ,method-name ,params ,body-expr)
+              (hash-set! static-methods method-name (method params body-expr #t))]
+       
+             ;; 构造函数
+             [`(constructor ,params . ,body-exprs)
+              (hash-set! methods 'constructor 
+                         (method params `(begin ,@body-exprs) #f))]
+       
+             ;; 析构函数
+             [`(destructor . ,body-exprs)
+              (hash-set! methods '__del__ 
+                         (method '() `(begin ,@body-exprs) #f))]
+       
+             ;; 无效的类体元素
+             [_ (error "Invalid class body element:" expr)]))
+   
+         (define new-class 
+           (class name super-obj fields methods static-fields static-methods))
+         (register-class! name new-class)
+         new-class))
+    
       ;; 接口定义
       [`(interface ,name ,methods ...)
        (let* ([method-table (make-hash)]
@@ -284,6 +279,7 @@
        (define arg-values (map (curry eval-expr env) args))
        (instantiate cls arg-values env)]
       
+    
       ;; 方法调用
       [`(send ,obj-expr ,method-name ,args ...)
        (define obj (eval-expr env obj-expr))
@@ -324,14 +320,14 @@
        (hash-set! (class-static-fields cls) field value)]
     
       ;; try/catch异常处理
-      [`(try ,body-exprs ... (catch ,e ,handler-expr))
+      [`(try ,body-expr (catch ,e ,handler-expr))
        (let ([old-handlers (exception-handlers)])
          (parameterize ([exception-handlers (cons (lambda (ex) 
                                                    (eval-expr 
                                                     (cons (cons e ex) env) 
                                                     handler-expr))
                                                  old-handlers)])
-           (eval-expr env `(begin ,@body-exprs))))]
+           (eval-expr env body-expr)))]
     
       ;; 运算符重载
       [`(,op ,left ,right) 
@@ -346,13 +342,16 @@
     
       ;; 变量定义
       [`(define ,var ,value)
-       (let* ([val (eval-expr env value)]
-              [new-binding (cons var val)]
-              [new-env (cons new-binding env)])
-         new-env)]
+       (let ([val (eval-expr env value)])
+         (cons (cons var val) env))]
     
       ;; 变量引用
       [(? symbol? var) (lookup-var env var)]
+    
+      ;; 字面量
+      [(? number? n) n]
+      [(? string? s) s]
+      [(? boolean? b) b]
     
       ;; if条件
       [`(if ,cond ,then ,else)
@@ -364,9 +363,10 @@
       [`(begin ,exprs ...)
        (for/fold ([current-env env] [result (void)] #:result result)
                  ([e exprs])
-         (let ([res (eval-expr current-env e)]
-               [is-define? (and (list? e) (eq? (car e) 'define))])
-           (values (if is-define? res current-env) 
+         (let ([res (eval-expr current-env e)])
+           (values (if (and (list? res) (eq? (car (car exprs)) 'define))
+                      res
+                      current-env)
                    res)))]
     
       ;; 函数应用
@@ -376,31 +376,19 @@
            (apply f (map (curry eval-expr env) args))
            (error (format "Not a procedure: ~a" f)))]
     
-      ;; 默认情况:直接返回值或报错
-      [v (if (or (number? v) (string? v) (boolean? v)) 
-             v 
-             (error (format "Unhandled expression: ~a" v)))]
+      ;; 直接值
+      [v v]
       )))
 
 ;; ==================== 程序执行 ====================
 (define (eval-program exprs)
   (let loop ([env (make-base-environment)] [exprs exprs])
     (if (null? exprs)
-        env  ; 返回最终环境
-        (let* ([current-expr (car exprs)]
-               [result (eval-expr env current-expr)]
-               [new-env 
-                (cond
-                  ;; 处理定义表达式返回的新环境
-                  [(and (list? result) (pair? result))
-                   (append result env)]  ; 关键修复:合并新绑定到现有环境
-                  ;; 处理类定义
-                  [(class? result) 
-                   (let* ([cls-name (class-name result)]
-                          [new-env (cons (cons cls-name result) env)])
-                     new-env)]
-                  ;; 其他情况保持环境不变
-                  [else env])])
+        (void)
+        (let* ([result (eval-expr env (car exprs))]
+               [new-env (if (and (list? result) (eq? (car (car exprs)) 'define)) 
+                           result 
+                           env)])
           (loop new-env (cdr exprs))))))
 
 ;; ==================== 调试支持 ====================
@@ -421,4 +409,3 @@
       ['locals (println (filter (lambda (p) (not (is-private-field? (car p)))) env))]
       ['breakpoints (println breakpoints)]
       [else (displayln "Available commands: step, continue, env, locals, breakpoints")])))
-

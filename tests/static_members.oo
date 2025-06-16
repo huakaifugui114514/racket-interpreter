@@ -1,0 +1,14 @@
+(class Counter ()
+  (static-field count 0)
+  
+  (constructor ()
+    (static-set Counter count (+ (static-get Counter count) 1)))
+  
+  (static-method getCount ()
+    (static-get Counter count)))
+
+(define c1 (new Counter))
+(define c2 (new Counter))
+(define c3 (new Counter))
+
+(println "Total instances: " (static-call Counter getCount))

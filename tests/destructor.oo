@@ -1,0 +1,20 @@
+(class Resource ()
+  (field data "")
+  
+  (constructor (d)
+    (set this data d)
+    (println "Resource created: " d))
+  
+  (destructor
+    (println "Destructor called: Resource released - " (get this data))))
+
+(define res (new Resource "Important Data"))
+(release res)
+(println "Resource released explicitly")
+
+;; 测试引用计数
+(define res1 (new Resource "Data 1"))
+(define res2 res1)  ;; 增加引用计数
+(retain res1)       ;; 手动增加引用计数
+(release res1)      ;; 减少引用计数（不会销毁）
+(release res2)      ;; 减少引用计数（销毁）

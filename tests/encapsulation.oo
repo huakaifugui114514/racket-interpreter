@@ -6,15 +6,18 @@
   
   (method withdraw (amount)
     (if (>= (get this balance) amount)
-        (begin
-          (set this balance (- (get this balance) amount))
-          #t)
-        "Insufficient funds"))
+        (set this balance (- (get this balance) amount))
+        (println "Insufficient funds")))
   
-  (method get-balance () 
+  (method getBalance ()
     (get this balance)))
 
 (define acc (new BankAccount))
 (send acc deposit 100)
 (send acc withdraw 30)
-(println (string-append "Balance: " (number->string (send acc get-balance))))
+(println "Balance after transactions: " (send acc getBalance))
+
+;; 尝试访问私有字段（应抛出错误）
+(try
+  (println "Private balance: " (get acc balance))
+  (catch e (println "Error caught: " (exception-message e))))

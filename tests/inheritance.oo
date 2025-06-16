@@ -1,18 +1,22 @@
 (class Animal ()
-  (field name "Unknown")
+  (field name "")
   
   (constructor (n)
     (set this name n))
   
-  (method speak () 
-    (println "Animal sound")))
+  (method speak ()
+    "Animal sound"))
 
 (class Dog (extends Animal)
-  (method speak () 
-    (println (string-append (get this name) " says: Woof!"))))
+  (method speak ()
+    (string-append (get this name) " says: Woof!")))
 
-(define a (new Animal "Generic Animal"))
-(send a speak)
+(class Cat (extends Animal)
+  (method speak ()
+    (string-append (get this name) " says: Meow!")))
 
-(define d (new Dog "Buddy"))
-(send d speak)
+(define dog (new Dog "Buddy"))
+(define cat (new Cat "Whiskers"))
+
+(println (send dog speak))
+(println (send cat speak))

@@ -1,5 +1,5 @@
 (class Shape ()
-  (method area () 0))
+  (abstract method area ()))
 
 (class Rectangle (extends Shape)
   (field width 0)
@@ -21,8 +21,7 @@
   (method area ()
     (* 3.14159 (get this radius) (get this radius))))
 
-(define rect (new Rectangle 5 10))
-(println (string-append "Rectangle area: " (number->string (send rect area))))
+(define shapes (list (new Rectangle 4 5) (new Circle 3)))
 
-(define circle (new Circle 7))
-(println (string-append "Circle area: " (number->string (send circle area))))
+(for ([s shapes])
+  (println "Area: " (send s area)))

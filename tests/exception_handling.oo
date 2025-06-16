@@ -1,0 +1,13 @@
+(class Calculator ()
+  (method divide (a b)
+    (if (= b 0)
+        (raise "Division by zero")
+        (/ a b))))
+
+(define calc (new Calculator))
+
+(try
+  (println "10 / 2 = " (send calc divide 10 2))
+  (println "10 / 0 = " (send calc divide 10 0))
+  (catch e
+    (println "Caught exception: " (exception-message e))))

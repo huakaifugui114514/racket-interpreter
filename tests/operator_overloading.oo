@@ -1,0 +1,21 @@
+(class Vector2D ()
+  (field x 0)
+  (field y 0)
+  
+  (constructor (a b)
+    (set this x a)
+    (set this y b))
+  
+  (method __add__ (other)
+    (new Vector2D 
+         (+ (get this x) (get other x))
+         (+ (get this y) (get other y))))
+  
+  (method __str__ ()
+    (string-append "(" (number->string (get this x)) ", " (number->string (get this y)) ")")))
+
+(define v1 (new Vector2D 3 4))
+(define v2 (new Vector2D 1 2))
+(define v3 (+ v1 v2))
+
+(println "v1 + v2 = " (send v3 __str__))
